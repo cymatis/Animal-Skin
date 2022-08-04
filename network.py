@@ -1,5 +1,3 @@
-#Soft Attention
-
 from keras import backend as K
 from keras.layers import Layer,InputSpec
 import keras.layers as kl
@@ -96,62 +94,131 @@ class SoftAttention(Layer):
     def get_config(self):
         return super(SoftAttention,self).get_config()
 
-def SA_model_call():
+################################################################################################################
+
+def ICRV2_EffiB2_VGG19(alpha):
     # Excluding the last 28 layers of the model.
+    # InceptionResNetv2 + EfficientNet-B2 + VGG19
 
-    input_img = tf.keras.Input(shape=(299,299,3))
-    rescale = tf.keras.layers.experimental.preprocessing.Rescaling(1./127, offset=-1)(input_img)
-    rand_flip = tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical")(rescale)
-    rand_rota = tf.keras.layers.experimental.preprocessing.RandomRotation(0.35)(rand_flip)
-    rand_zoom = tf.keras.layers.experimental.preprocessing.RandomZoom(.25, .25, fill_mode="nearest")(rand_rota)
+    if alpha == "rbga":
+        channel = 4
+    else:
+        channel = 3
 
-    # alpha_layer = tf.keras.layers.Conv2D(16, 3, strides=(1,1), padding='same', activation='relu', use_bias=False)(rand_rota)
-    # alpha_layer = tf.keras.layers.Conv2D(32, 3, strides=(1,1), padding='same', activation='relu', use_bias=False)(alpha_layer)
-    # alpha_layer = tf.keras.layers.Conv2D(64, 3, strides=(1,1), padding='same', activation='relu', use_bias=False)(alpha_layer)
-    # alpha_layer = tf.keras.layers.Conv2D(3, 3, strides=(1,1), padding='same', activation='relu', use_bias=False)(alpha_layer)
-    
-    irv2 = tf.keras.applications.InceptionResNetV2(
-    include_top=True,
-    weights=None,
-    input_tensor=rand_zoom,
+    input_img = tf.keras.Input(shape=(360,360,channel))
+
+    rand_flip = tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical")(input_img)
+    rand_rota = tf.keras.layers.experimental.preprocessing.RandomRotation(0.5)(rand_flip)
+    rand_zoom = tf.keras.layers.experimental.preprocessing.RandomZoom(.5, .5, fill_mode="nearest")(rand_rota)
+    rand_crop = tf.keras.layers.experimental.preprocessing.RandomCrop(299, 299)(rand_zoom)
+
+    rescale = tf.keras.layers.experimental.preprocessing.Rescaling(1./127, offset=-1)(rand_crop)
+
+    resize_VGG19 = tf.keras.layers.experimental.preprocessing.Resizing(224, 224)(rescale)
+    # resize_IRV2 = tf.keras.layers.experimental.preprocessing.Resizing(299, 299)(rescale)
+    # resize_B0 = tf.keras.layers.experimental.preprocessing.Resizing(224, 224)(rescale)
+    resize_B2 = tf.keras.layers.experimental.preprocessing.Resizing(260, 260)(rescale)
+    # resize_Dense = tf.keras.layers.experimental.preprocessing.Resizing(224, 224)(rescale)
+
+    ############
+
+    irv2_01 = tf.keras.applications.InceptionResNetV2(
+    include_top=False, weights='imagenet', 
+    input_tensor=rescale, input_shape=None, 
+    pooling=None, classifier_activation='softmax')
+
+    # Excluding the last 28 layers of the model.
+    conv_01 = irv2_01.layers[-28].output
+
+    attention_layer_01, _ = SoftAttention(aggregate=True,m=16,concat_with_x=False,ch=int(conv_01.shape[-1]),name='soft_attention_01')(conv_01)
+    attention_layer_01=(tf.keras.layers.MaxPooling2D(pool_size=(2, 2),padding="same")(attention_layer_01))
+    conv_01=(tf.keras.layers.MaxPooling2D(pool_size=(2, 2),padding="same")(conv_01))
+
+    conv_01 = tf.concat([conv_01,attention_layer_01],-1)
+    conv_01  = tf.keras.layers.Activation('swish')(conv_01)
+    conv_01 = tf.keras.layers.Dropout(0.5)(conv_01)
+
+    output_01 = tf.keras.layers.Flatten()(conv_01)
+    output_01 = tf.keras.layers.Dense(5, activation='softmax')(output_01)
+
+    for layer in irv2_01.layers:
+        layer._name = layer.name + str("_01")
+
+    ############
+
+    irv2_02 = tf.keras.applications.VGG19(
+    include_top=False,
+    weights='imagenet',
+    input_tensor=resize_VGG19,
     input_shape=None,
-    pooling=None,
-    classifier_activation="softmax")
+    pooling=None
+    )
 
-    conv = irv2.layers[-28].output
-    
-    attention_layer,map2 = SoftAttention(aggregate=True,m=16,concat_with_x=False,ch=int(conv.shape[-1]),name='soft_attention')(conv)
-    attention_layer=(tf.keras.layers.MaxPooling2D(pool_size=(2, 2),padding="same")(attention_layer))
-    conv=(tf.keras.layers.MaxPooling2D(pool_size=(2, 2),padding="same")(conv))
+    # Excluding the last 28 layers of the model.
+    conv_02 = irv2_02.output
 
-    conv = tf.keras.layers.concatenate([conv,attention_layer])
-    conv  = tf.keras.layers.Activation('relu')(conv)
-    conv = tf.keras.layers.Dropout(0.5)(conv)
+    attention_layer_02, _ = SoftAttention(aggregate=True,m=16,concat_with_x=False,ch=int(conv_02.shape[-1]),name='soft_attention_02')(conv_02)
+    attention_layer_02=(tf.keras.layers.MaxPooling2D(pool_size=(2, 2),padding="same")(attention_layer_02))
+    conv_02=(tf.keras.layers.MaxPooling2D(pool_size=(2, 2),padding="same")(conv_02))
 
-    output = tf.keras.layers.Flatten()(conv)
-    output = tf.keras.layers.Dense(7, activation='softmax')(output)
+    conv_02 = tf.concat([conv_02,attention_layer_02],-1)
+    conv_02  = tf.keras.layers.Activation('swish')(conv_02)
+    conv_02 = tf.keras.layers.Dropout(0.5)(conv_02)
 
-    tf.keras.Model(inputs=irv2.input, outputs=output)
+    output_02 = tf.keras.layers.Flatten()(conv_02)
+    output_02 = tf.keras.layers.Dense(5, activation='softmax')(output_02)
 
-    return tf.keras.Model(inputs=irv2.input, outputs=output)
+    for layer in irv2_02.layers:
+        layer._name = layer.name + str("_02")
 
-def cat_call(input_shape):
-    img = tf.keras.Input(shape=input_shape, name = "image")
-    mask = tf.keras.Input(shape=input_shape, name = "mask")
-    img_mask = tf.math.multiply(img, mask)
+    ##############
 
-    return tf.keras.Model(inputs=[img, mask], outputs=img_mask)
+    # irv2_03 = tf.keras.applications.efficientnet.EfficientNetB0(
+    # include_top=False, weights='imagenet', 
+    # input_tensor=resize_VGG19, input_shape=None, 
+    # pooling=None, classifier_activation='softmax')
 
-def eff_call():
-    input_img = tf.keras.Input(shape=(384,384,3))
-    rescale = tf.keras.layers.experimental.preprocessing.Rescaling(1./255)(input_img)
-    rand_flip = tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical")(rescale)
-    rand_rota = tf.keras.layers.experimental.preprocessing.RandomRotation(0.45)(rand_flip)
-    rand_zoom = tf.keras.layers.experimental.preprocessing.RandomZoom(.45, fill_mode="nearest")(rand_rota)
+    # # Excluding the last 28 layers of the model.
+    # conv_03 = irv2_03.layers[-7].output
 
-    efficient_backbone = tf.keras.applications.efficientnet.EfficientNetB1(
-    include_top=True, weights=None, 
-    input_tensor=rand_zoom, input_shape=None, 
-    pooling=None, classes=8, classifier_activation='softmax')
+    # attention_layer_03, _ = SoftAttention(aggregate=True,m=16,concat_with_x=False,ch=int(conv_03.shape[-1]),name='soft_attention_03')(conv_03)
+    # attention_layer_03=(tf.keras.layers.MaxPooling2D(pool_size=(2, 2),padding="same")(attention_layer_03))
+    # conv_03=(tf.keras.layers.MaxPooling2D(pool_size=(2, 2),padding="same")(conv_03))
 
-    return tf.keras.Model(inputs=input_img, outputs=efficient_backbone.output)
+    # conv_03 = tf.concat([conv_03,attention_layer_03],-1)
+    # conv_03  = tf.keras.layers.Activation('swish')(conv_03)
+    # conv_03 = tf.keras.layers.Dropout(0.5)(conv_03)
+
+    # output_03 = tf.keras.layers.Flatten()(conv_03)
+    # output_03 = tf.keras.layers.Dense(5, activation='softmax')(output_03)
+
+    # for layer in irv2_03.layers:
+    #     layer._name = layer.name + str("_03")
+
+    ###############
+
+    irv2_04 = tf.keras.applications.efficientnet.EfficientNetB2(
+    include_top=False, weights='imagenet', 
+    input_tensor=resize_B2, input_shape=None, 
+    pooling=None, classifier_activation='softmax')
+
+    # Excluding the last 28 layers of the model.
+    conv_04 = irv2_04.layers[-7].output
+
+    attention_layer_04, _ = SoftAttention(aggregate=True,m=16,concat_with_x=False,ch=int(conv_04.shape[-1]),name='soft_attention_04')(conv_04)
+    attention_layer_04=(tf.keras.layers.MaxPooling2D(pool_size=(2, 2),padding="same")(attention_layer_04))
+    conv_04=(tf.keras.layers.MaxPooling2D(pool_size=(2, 2),padding="same")(conv_04))
+
+    conv_04 = tf.concat([conv_04,attention_layer_04],-1)
+    conv_04  = tf.keras.layers.Activation('swish')(conv_04)
+    conv_04 = tf.keras.layers.Dropout(0.5)(conv_04)
+
+    output_04 = tf.keras.layers.Flatten()(conv_04)
+    output_04 = tf.keras.layers.Dense(5, activation='softmax')(output_04)
+
+    for layer in irv2_04.layers:
+        layer._name = layer.name + str("_04")
+
+    avg_output = tf.keras.layers.Average()([output_01,output_02,output_04])
+
+    return tf.keras.Model(inputs=input_img, outputs=avg_output)
