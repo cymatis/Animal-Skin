@@ -5,21 +5,21 @@ install python requirements
 
 you may not follow all dependency in requirements.txt, excepts tensorflow 2.5 or lower(2.x)  
 
-usage run.py  
- python3 run.py [-h] [--batch_size BATCH_SIZE] [--image_size IMG_SIZE] [--channel ALPHA_MODE] [--save_result SAVE_RESULT] [--input_dir] ckpt_dir  
+usage test.py  
+ python3 test.py [-h] [--batch_size BATCH_SIZE] [--image_size IMG_SIZE] [--channel ALPHA_MODE] [--save_result SAVE_RESULT] [--input_dir] ckpt_dir  
 
 examples  
 Loop mode : without --input_dir, model will wait for new input directory after every inference is done.  
- python3 run.py weights/ICRV2_EffiB2_VGG19.ckpt  
+ python3 test.py weights/ICRV2_EffiB2_VGG19.ckpt  
 
 To run classification with images in single folder  
- python3 run.py weights/ICRV2_EffiB2_VGG19.ckpt --input_dir no_label  
+ python3 test.py weights/ICRV2_EffiB2_VGG19.ckpt --input_dir no_label  
  
 To run classification with images without labels in test folder.  
- python3 run.py weights/ICRV2_EffiB2_VGG19.ckpt --input_dir test_fungal.jpg  
+ python3 test.py weights/ICRV2_EffiB2_VGG19.ckpt --input_dir test_fungal.jpg  
  
 To save result, --save_result True  
- python3 run.py weights/ICRV2_EffiB2_VGG19.ckpt [any_arguments] --save_result True  
+ python3 test.py weights/ICRV2_EffiB2_VGG19.ckpt [any_arguments] --save_result True  
 
 
 
@@ -49,5 +49,5 @@ ex) tf.keras.preprocessing.image.load_img > tf.keras.utils.image.load_img
 
 if you need to check every log message from tensorflow, remove os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  
 
-To use images that are not jpg, png and jpeg, please modifiy the file extentions at line 30 in run.py  
+To use images that are not jpg, png and jpeg, please modifiy the file extentions at line 30 in test.py  
  if test_dir.find("*.jpg") + test_dir.find("*.png") + test_dir.find("*.jpeg")  
