@@ -11,32 +11,12 @@ from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
 
 base_dir = os.getcwd()
-data_dir = os.path.join(base_dir, "datasets/ISIC2019")
-test_dir = os.path.join(base_dir, "datasets/HAM10000/test_a")
+data_dir = os.path.join(base_dir, "dataset/ISIC2019_alpha/train")
+test_dir = os.path.join(base_dir, "dataset/ISIC2019_alpha/val")
 
-batch_size = 4
-img_height = 384
-img_width = 384
-
-train_ds = tf.keras.preprocessing.image_dataset_from_directory(
-  data_dir,
-  validation_split=0.2,
-  subset="training",
-  shuffle=True,
-  seed=123,
-  color_mode='rgb',
-  image_size=(img_height, img_width),
-  batch_size=batch_size)
-
-val_ds = tf.keras.preprocessing.image_dataset_from_directory(
-  data_dir,
-  validation_split=0.2,
-  subset="validation",
-  shuffle=True,
-  seed=123,
-  color_mode='rgb',
-  image_size=(img_height, img_width),
-  batch_size=batch_size)
+batch_size = 32
+img_height = 380
+img_width = 380
 
 # train_ds, train_ds_ms = processing.train_dataset_call()
 # val_ds, val_ds_ms = processing.test_dataset_call()
@@ -50,20 +30,55 @@ val_ds = tf.keras.preprocessing.image_dataset_from_directory(
 # forward_pass = model_pre(preprocessing_img)
 
 # model = tf.keras.Model([img_input, mask_input],forward_pass)
-model = network.eff_call()
 
-model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
+########## new model ############
+mirrored_strategy = tf.distribute.MirroredStrategy()
+
+print('Number of GPUs: {}'.format(mirrored_strategy.num_replicas_in_sync))
+
+with mirrored_strategy.scope():
+  model = network.ens_eff_call()
+  model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
               loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
               metrics='accuracy')
 
-log_dir = "./logs/soft-attention-builtin-aug-ISIC/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+train_ds = tf.keras.preprocessing.image_dataset_from_directory(
+  data_dir,
+  shuffle=True,
+  seed=123,
+  color_mode='rgba',
+  image_size=(img_height, img_width),
+  batch_size=batch_size)
+
+val_ds = tf.keras.preprocessing.image_dataset_from_directory(
+  test_dir,
+  shuffle=True,
+  seed=123,
+  color_mode='rgba',
+  image_size=(img_height, img_width),
+  batch_size=batch_size)
+  
+# options = tf.data.Options()
+# options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+# train_ds = train_ds.with_options(options)
+# val_ds = val_ds.with_options(options)
+
+########## new model end ############
+
+log_dir = "./logs/soft-attention-builtin-aug-ISIC-a-b024-nosa/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = tf.keras.callbacks.TensorBoard(
     log_dir=log_dir, histogram_freq=1, write_graph=False,
     write_steps_per_second=True, update_freq='batch',
     profile_batch=2, embeddings_freq=0, embeddings_metadata=None
 )
 
-checkpoint_path = "./checkpoint/soft-attention-builtin-aug-ISIC/cp_{epoch:04d}_{val_accuracy:.3f}.ckpt"
+checkpoint_path = "./checkpoint/soft-attention-builtin-aug-ISIC-a-b024-nosa/cp_{epoch:04d}_{val_accuracy:.3f}.ckpt"
+
+# ####### load #######
+
+# model = tf.keras.models.load_model('/home/pmi-minos/Documents/MinosNet/checkpoint/soft-attention-builtin-aug-ISIC-a/cp_0001_0.748.ckpt')
+
+# ####### load end #######
 
 cp_callback = tf.keras.callbacks.ModelCheckpoint(
     checkpoint_path, monitor='val_accuracy', verbose=1, save_best_only=True,
@@ -79,12 +94,12 @@ class_weights = {
                     4: 1.0,  # mel
                     5: 0.5,  # nv
                     6: 5.0,  # scc
-                    7: 11.0   # vasc
+                    7: 10.0   # vasc
                 }
 
 model.summary()
 
-epochs=100000
+epochs=2000
 history = model.fit(
   train_ds,
   validation_data=val_ds,
