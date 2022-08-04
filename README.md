@@ -5,8 +5,6 @@ install python requirements
 
 you may not follow all dependency in requirements.txt, excepts tensorflow 2.5 or lower(2.x)  
 
-##############################################################################
-
 usage run.py  
  python3 run.py [-h] [--batch_size BATCH_SIZE] [--image_size IMG_SIZE] [--channel ALPHA_MODE] [--save_result SAVE_RESULT] [--input_dir] ckpt_dir  
 
