@@ -85,16 +85,12 @@ cp_callback = tf.keras.callbacks.ModelCheckpoint(
     save_weights_only=True, mode='auto', save_freq='epoch',
     options=None
 )
-
 class_weights = {   
-                    0: 3.0,  # akiec
-                    1: 1.0,  # bcc
-                    2: 1.0,  # bkl
-                    3: 10.0,  # df
-                    4: 1.0,  # mel
-                    5: 0.5,  # nv
-                    6: 5.0,  # scc
-                    7: 10.0   # vasc
+                    0: 3.0,  # atopic
+                    1: 1.0,  # bacterial
+                    2: 6.0,  # etc
+                    3: 2.0,  # fungal
+                    4: 1.0,  # normal
                 }
 
 model.summary()
